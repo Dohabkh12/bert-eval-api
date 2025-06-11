@@ -8,42 +8,39 @@ import requests
 app = Flask(__name__)
 CORS(app)
 
-# 📦 Étape 1 – Télécharger le modèle depuis Hugging Face si absent
-model_dir = ".bert-quiz-model-fin/bert-quiz-model2"
-model_file = f"{model_dir}/model.safetensors"
+MODEL_DIR = "model"
+MODEL_FILE = f"{MODEL_DIR}/model.safetensors"
 
-if not os.path.exists(model_file):
-    os.makedirs(model_dir, exist_ok=True)
-    print("🔽 Téléchargement du modèle depuis Hugging Face...")
+# Télécharger le modèle si pas présent
+if not os.path.exists(MODEL_FILE):
+    os.makedirs(MODEL_DIR, exist_ok=True)
     url = "https://huggingface.co/dohabkh/bert-eval-asd/resolve/main/model.safetensors"
     r = requests.get(url)
-    with open(model_file, "wb") as f:
+    with open(MODEL_FILE, "wb") as f:
         f.write(r.content)
-    print("✅ Modèle téléchargé avec succès.")
 
-# 📦 Étape 2 – Charger le modèle localement
-tokenizer = BertTokenizer.from_pretrained(model_dir)
-model = BertForSequenceClassification.from_pretrained(model_dir)
+# Chargement du modèle
+tokenizer = BertTokenizer.from_pretrained(MODEL_DIR)
+model = BertForSequenceClassification.from_pretrained(MODEL_DIR)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 model.eval()
 
-def predict_with_confidence(question, student_answer):
-    text = question + " [SEP] " + student_answer
+@app.route("/predict", methods=["POST"])
+def predict():
+    data = request.get_json()
+    text = data.get("question", "") + " [SEP] " + data.get("student_answer", "")
     inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True).to(device)
     with torch.no_grad():
         outputs = model(**inputs)
     probs = torch.nn.functional.softmax(outputs.logits, dim=1)
     confidence = probs[0][1].item()
-    return f"✅ Correct ({confidence:.2f})" if confidence > 0.79 else f"❌ Incorrect ({confidence:.2f})"
+    result = "✅ Correct" if confidence > 0.79 else "❌ Incorrect"
+    return jsonify({"result": result, "confidence": round(confidence, 2)})
 
-@app.route("/predict", methods=["POST"])
-def predict():
-    data = request.json
-    question = data.get("question", "")
-    student_answer = data.get("student_answer", "")
-    prediction = predict_with_confidence(question, student_answer)
-    return jsonify(prediction)
+@app.route("/", methods=["GET"])
+def home():
+    return "✅ BERT API is running on HF Spaces!"
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=9000, debug=True)
+    app.run(host="0.0.0.0", port=7860)
