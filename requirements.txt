@@ -1,4 +1,5 @@
 flask
 flask-cors
-transformers==4.39.3
-torch==2.2.2
+transformers
+torch
+gdown
